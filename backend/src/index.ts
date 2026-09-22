@@ -102,3 +102,6 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 app.listen(PORT, () => {
   console.log(`🚀 Lumirise Enterprise API running on http://localhost:${PORT}`);
 });
+
+// Export for Vercel serverless deployment
+export default app;
