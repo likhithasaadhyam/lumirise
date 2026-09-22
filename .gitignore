@@ -1,0 +1,32 @@
+﻿# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+frontend/dist/
+
+# Environment files — NEVER commit secrets
+.env
+.env.local
+.env.production
+backend/.env
+
+# SQLite dev database — keep local only
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+
+# Prisma generated client
+node_modules/.prisma/
+
+# OS & editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Development database export - never commit
+backend/prisma/dev-data-dump.json

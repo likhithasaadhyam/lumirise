@@ -1,0 +1,39 @@
+{
+  "name": "lumirise-backend",
+  "version": "1.0.0",
+  "description": "Lumirise Enterprise Manufacturing ERP API",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "prisma:generate": "prisma generate",
+    "prisma:generate:pg": "prisma generate --schema=prisma/schema.postgresql.prisma",
+    "prisma:push": "prisma db push",
+    "prisma:push:pg": "prisma db push --schema=prisma/schema.postgresql.prisma",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.postgresql.prisma",
+    "seed": "tsx src/seed.ts",
+    "db:export": "tsx prisma/export-data.ts",
+    "db:import:pg": "tsx prisma/import-to-postgres.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.4.1",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "lumirise-workspace": "file:..",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^22.13.9",
+    "prisma": "^6.4.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

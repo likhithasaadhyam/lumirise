@@ -1,0 +1,780 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -------------------------------------------------------------
+// MULTI-TENANCY, IAM & SECURITY
+// -------------------------------------------------------------
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  industry    String?
+  size        String?
+  country     String?
+  email       String?
+  phone       String?
+  address     String?
+  currency    String   @default("USD")
+  logo        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users              User[]
+  roles              Role[]
+  departments        Department[]
+  employees          Employee[]
+  shifts             Shift[]
+  attendanceRecords  Attendance[]
+  leaveTypes         LeaveType[]
+  leaveRequests      LeaveRequest[]
+  jobOpenings        JobOpening[]
+  candidates         Candidate[]
+  onboardingTasks    OnboardingTask[]
+  payrollPeriods     PayrollPeriod[]
+  payrollSlips       PayrollSlip[]
+  performanceReviews PerformanceReview[]
+  warehouses         Warehouse[]
+  suppliers          Supplier[]
+  rawMaterials       RawMaterial[]
+  products           Product[]
+  stockLedgerEntries StockLedgerEntry[]
+  batches            Batch[]
+  stockTransfers     StockTransfer[]
+  productionPlans    ProductionPlan[]
+  productionOrders   ProductionOrder[]
+  materialIssues     MaterialIssue[]
+  qualityInspections QualityInspection[]
+  finishedGoods      FinishedGood[]
+  dispatchOrders     DispatchOrder[]
+  customers          Customer[]
+  leads              Lead[]
+  quotations         Quotation[]
+  salesOrders        SalesOrder[]
+  invoices           Invoice[]
+  payments           Payment[]
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+}
+
+model User {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  passwordHash   String
+  firstName      String
+  lastName       String
+  roleId         String
+  role           Role         @relation(fields: [roleId], references: [id])
+  employeeId     String?      @unique
+  employee       Employee?    @relation(fields: [employeeId], references: [id])
+  status         String       @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED
+  avatar         String?
+  lastLoginAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, email])
+}
+
+model Role {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  isSystem       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  users          User[]
+  permissions    Permission[]
+  employees      Employee[]
+
+  @@unique([organizationId, name])
+}
+
+model Permission {
+  id        String   @id @default(uuid())
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  code      String   // e.g. "production.view", "dashboard.view"
+  module    String   // OPERATIONS, INVENTORY, HR, CRM, REPORTS, SETTINGS, SELF_SERVICE
+  action    String   // VIEW, CREATE, EDIT, DELETE, APPROVE, MANAGE
+  createdAt DateTime @default(now())
+
+  @@unique([roleId, code])
+}
+
+model AuditLog {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  userName       String
+  action         String       // CREATE, UPDATE, DELETE, STATUS_CHANGE, LOGIN
+  entity         String       // ProductionOrder, Employee, Invoice, Stock, etc.
+  entityId       String?
+  details        String       // JSON string or summary
+  oldValue       String?
+  newValue       String?
+  ipAddress      String?
+  createdAt      DateTime     @default(now())
+}
+
+model Notification {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?      // Null means org-wide / broadcast
+  title          String
+  message        String
+  type           String       @default("INFO") // INFO, WARNING, ALERT, SUCCESS
+  link           String?
+  isRead         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+}
+
+// -------------------------------------------------------------
+// PEOPLE / HRMS
+// -------------------------------------------------------------
+
+model Department {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  code           String
+  description    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  employees      Employee[]
+  jobOpenings    JobOpening[]
+
+  @@unique([organizationId, code])
+}
+
+model Shift {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  code           String
+  startTime      String       // e.g. "06:00"
+  endTime        String       // e.g. "14:00"
+  description    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  employees        Employee[]
+  attendance       Attendance[]
+  productionOrders ProductionOrder[]
+
+  @@unique([organizationId, code])
+}
+
+model Employee {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeCode   String
+  firstName      String
+  lastName       String
+  email          String
+  phone          String?
+  avatar         String?
+  departmentId   String
+  department     Department   @relation(fields: [departmentId], references: [id])
+  designation    String
+  roleId         String?
+  role           Role?        @relation(fields: [roleId], references: [id])
+  shiftId        String?
+  shift          Shift?       @relation(fields: [shiftId], references: [id])
+  managerId      String?
+  manager        Employee?    @relation("ReportingHierarchy", fields: [managerId], references: [id])
+  subordinates   Employee[]   @relation("ReportingHierarchy")
+  joiningDate    DateTime
+  employmentType String       @default("FULL_TIME") // FULL_TIME, PART_TIME, CONTRACT
+  workLocation   String       @default("Headquarters - Plant 1")
+  bankAccount    String?
+  bankName       String?
+  basicSalary    Float        @default(0)
+  allowances     Float        @default(0)
+  deductions     Float        @default(0)
+  status         String       @default("ACTIVE") // ACTIVE, ON_LEAVE, TERMINATED
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  user               User?
+  attendanceRecords  Attendance[]
+  leaveRequests      LeaveRequest[]
+  onboardingTasks    OnboardingTask[]
+  payrollSlips       PayrollSlip[]
+  performanceReviews PerformanceReview[]
+  supervisedOrders   ProductionOrder[]   @relation("SupervisorOrders")
+
+  @@unique([organizationId, employeeCode])
+  @@unique([organizationId, email])
+}
+
+model Attendance {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date           String       // YYYY-MM-DD
+  checkIn        String?      // HH:mm
+  checkOut       String?      // HH:mm
+  status         String       @default("PRESENT") // PRESENT, ABSENT, LATE, HALF_DAY, ON_LEAVE
+  shiftId        String?
+  shift          Shift?       @relation(fields: [shiftId], references: [id])
+  workHours      Float?
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, employeeId, date])
+}
+
+model LeaveType {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  daysAllowed    Int          @default(12)
+  description    String?
+
+  leaveRequests  LeaveRequest[]
+
+  @@unique([organizationId, name])
+}
+
+model LeaveRequest {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveTypeId    String
+  leaveType      LeaveType    @relation(fields: [leaveTypeId], references: [id])
+  startDate      String
+  endDate        String
+  days           Int
+  reason         String
+  status         String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedById   String?
+  comments       String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model JobOpening {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title          String
+  departmentId   String
+  department     Department   @relation(fields: [departmentId], references: [id])
+  openings       Int          @default(1)
+  experience     String?
+  salaryRange    String?
+  location       String       @default("Plant 1")
+  status         String       @default("OPEN") // OPEN, IN_REVIEW, CLOSED
+  description    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  candidates     Candidate[]
+}
+
+model Candidate {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobOpeningId   String
+  jobOpening     JobOpening   @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
+  name           String
+  email          String
+  phone          String?
+  resumeUrl      String?
+  stage          String       @default("APPLIED") // APPLIED, SCREENING, INTERVIEW, SELECTED, OFFER, JOINED, REJECTED
+  rating         Int          @default(3)
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model OnboardingTask {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  title          String
+  category       String       @default("GENERAL") // GENERAL, IT, HR, OPERATIONS
+  isCompleted    Boolean      @default(false)
+  dueDate        String?
+  createdAt      DateTime     @default(now())
+}
+
+model PayrollPeriod {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  month          Int
+  year           Int
+  name           String       // e.g. "October 2025"
+  status         String       @default("DRAFT") // DRAFT, PROCESSING, APPROVED, PAID
+  totalAmount    Float        @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  slips          PayrollSlip[]
+
+  @@unique([organizationId, month, year])
+}
+
+model PayrollSlip {
+  id              String        @id @default(uuid())
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payrollPeriodId String
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        Employee      @relation(fields: [employeeId], references: [id])
+  basicSalary     Float
+  allowances      Float         @default(0)
+  overtime        Float         @default(0)
+  deductions      Float         @default(0)
+  netSalary       Float
+  status          String        @default("GENERATED") // GENERATED, APPROVED, PAID
+  paymentDate     DateTime?
+  createdAt       DateTime      @default(now())
+}
+
+model PerformanceReview {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  period         String       // Q3 2025, Annual 2025
+  score          Float        // out of 5.0
+  kpiAchievements String?     // e.g. "98.5% yield on CNC machining"
+  feedback       String?
+  status         String       @default("COMPLETED") // DRAFT, SUBMITTED, COMPLETED
+  createdAt      DateTime     @default(now())
+}
+
+// -------------------------------------------------------------
+// INVENTORY & WAREHOUSE
+// -------------------------------------------------------------
+
+model Warehouse {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  code           String
+  location       String
+  capacity       String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  stockLedgerEntries StockLedgerEntry[]
+  finishedGoods      FinishedGood[]
+  sourceTransfers    StockTransfer[]    @relation("SourceWarehouse")
+  targetTransfers    StockTransfer[]    @relation("TargetWarehouse")
+
+  @@unique([organizationId, code])
+}
+
+model Supplier {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  contactPerson  String?
+  email          String?
+  phone          String?
+  address        String?
+  taxNumber      String?
+  rating         Float        @default(4.5)
+  status         String       @default("ACTIVE")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  rawMaterials   RawMaterial[]
+
+  @@unique([organizationId, code])
+}
+
+model RawMaterial {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  category       String       // Metals, Polymers, Electronics, Fasteners, Coatings
+  unit           String       // kg, meters, pcs, liters
+  unitCost       Float
+  minStockLevel  Float        @default(50)
+  currentStock   Float        @default(0)
+  supplierId     String?
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  materialIssues MaterialIssue[]
+
+  @@unique([organizationId, code])
+}
+
+model Product {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sku            String
+  name           String
+  category       String       // Precision Valves, Actuators, Mechanical Assemblies
+  description    String?
+  unit           String       @default("pcs")
+  unitPrice      Float
+  costPrice      Float
+  minStockLevel  Float        @default(20)
+  currentStock   Float        @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  productionOrders ProductionOrder[]
+  finishedGoods    FinishedGood[]
+
+  @@unique([organizationId, sku])
+}
+
+model StockLedgerEntry {
+  id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  warehouseId     String
+  warehouse       Warehouse    @relation(fields: [warehouseId], references: [id])
+  itemType        String       // RAW_MATERIAL or PRODUCT
+  itemId          String
+  itemName        String
+  transactionType String       // STOCK_IN, STOCK_OUT, PRODUCTION_ISSUE, FINISHED_RECEIPT, TRANSFER, ADJUSTMENT
+  quantity        Float
+  balanceAfter    Float
+  referenceNumber String?      // PO-1025, GRN-8802, etc.
+  batchNumber     String?
+  notes           String?
+  createdByName   String       @default("System")
+  createdAt       DateTime     @default(now())
+}
+
+model Batch {
+  id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  batchNumber     String
+  itemType        String       // RAW_MATERIAL, PRODUCT
+  itemId          String
+  itemName        String
+  quantity        Float
+  initialQuantity Float
+  manufacturingDate String
+  expiryDate      String?
+  status          String       @default("RELEASED") // QUARANTINE, RELEASED, REJECTED, EXPIRED
+  createdAt       DateTime     @default(now())
+
+  @@unique([organizationId, batchNumber])
+}
+
+model StockTransfer {
+  id                String       @id @default(uuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transferNumber    String
+  sourceWarehouseId String
+  sourceWarehouse   Warehouse    @relation("SourceWarehouse", fields: [sourceWarehouseId], references: [id])
+  targetWarehouseId String
+  targetWarehouse   Warehouse    @relation("TargetWarehouse", fields: [targetWarehouseId], references: [id])
+  itemType          String
+  itemId            String
+  itemName          String
+  quantity          Float
+  status            String       @default("COMPLETED") // DRAFT, IN_TRANSIT, COMPLETED, CANCELLED
+  notes             String?
+  createdAt         DateTime     @default(now())
+
+  @@unique([organizationId, transferNumber])
+}
+
+// -------------------------------------------------------------
+// MANUFACTURING OPERATIONS
+// -------------------------------------------------------------
+
+model ProductionPlan {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  planNumber     String
+  title          String
+  startDate      String
+  endDate        String
+  status         String       @default("APPROVED") // DRAFT, APPROVED, IN_PROGRESS, COMPLETED
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  orders         ProductionOrder[]
+
+  @@unique([organizationId, planNumber])
+}
+
+model ProductionOrder {
+  id                   String          @id @default(uuid())
+  organizationId       String
+  organization         Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orderNumber          String
+  productionPlanId     String?
+  productionPlan       ProductionPlan? @relation(fields: [productionPlanId], references: [id])
+  productId            String
+  product              Product         @relation(fields: [productId], references: [id])
+  targetQuantity       Int
+  completedQuantity    Int             @default(0)
+  rejectedQuantity     Int             @default(0)
+  status               String          @default("PLANNED") // DRAFT, PLANNED, MATERIAL_PENDING, READY, IN_PROGRESS, QUALITY_CHECK, COMPLETED, CANCELLED
+  startDate            String
+  dueDate              String
+  shiftId              String?
+  shift                Shift?          @relation(fields: [shiftId], references: [id])
+  assignedSupervisorId String?
+  assignedSupervisor   Employee?       @relation("SupervisorOrders", fields: [assignedSupervisorId], references: [id])
+  notes                String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  materialIssues     MaterialIssue[]
+  finishedGoods      FinishedGood[]
+
+  @@unique([organizationId, orderNumber])
+}
+
+model MaterialIssue {
+  id                String          @id @default(uuid())
+  organizationId    String
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productionOrderId String
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  rawMaterialId     String
+  rawMaterial       RawMaterial     @relation(fields: [rawMaterialId], references: [id])
+  quantityRequired  Float
+  quantityIssued    Float           @default(0)
+  status            String          @default("PENDING") // PENDING, ISSUED, PARTIAL
+  createdAt         DateTime        @default(now())
+}
+
+model QualityInspection {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inspectionNumber String
+  stage          String       // MATERIAL_RECEIVED, IN_PROCESS, FINISHED_PRODUCT
+  referenceType  String       // ProductionOrder, StockIn, FinishedGood
+  referenceNumber String
+  itemName       String
+  inspectorName  String
+  sampleSize     Int
+  defectsCount   Int          @default(0)
+  status         String       @default("PASS") // PASS, FAIL, HOLD, REWORK
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, inspectionNumber])
+}
+
+model FinishedGood {
+  id                String          @id @default(uuid())
+  organizationId    String
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productionOrderId String?
+  productionOrder   ProductionOrder? @relation(fields: [productionOrderId], references: [id])
+  productId         String
+  product           Product         @relation(fields: [productId], references: [id])
+  batchNumber       String
+  quantity          Int
+  warehouseId       String
+  warehouse         Warehouse       @relation(fields: [warehouseId], references: [id])
+  status            String          @default("IN_STOCK") // IN_STOCK, ALLOCATED, DISPATCHED
+  createdAt         DateTime        @default(now())
+}
+
+model DispatchOrder {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dispatchNumber String
+  salesOrderNumber String
+  customerName   String
+  carrier        String
+  trackingNumber String?
+  dispatchDate   String
+  status         String       @default("DISPATCHED") // PREPARING, DISPATCHED, IN_TRANSIT, DELIVERED
+  itemSummary    String
+  totalItems     Int
+  destination    String
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, dispatchNumber])
+}
+
+// -------------------------------------------------------------
+// CRM / SALES / BUSINESS
+// -------------------------------------------------------------
+
+model Customer {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  company        String
+  email          String
+  phone          String?
+  address        String?
+  taxNumber      String?
+  creditLimit    Float        @default(50000)
+  status         String       @default("ACTIVE")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  quotations     Quotation[]
+  salesOrders    SalesOrder[]
+  invoices       Invoice[]
+  payments       Payment[]
+
+  @@unique([organizationId, code])
+}
+
+model Lead {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  company        String
+  email          String
+  phone          String?
+  source         String       @default("WEBSITE") // WEBSITE, REFERRAL, TRADE_SHOW, COLD_CALL
+  status         String       @default("NEW")     // NEW, CONTACTED, QUALIFIED, PROPOSAL, WON, LOST
+  estimatedValue Float        @default(0)
+  assignedToName String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  quotations     Quotation[]
+}
+
+model Quotation {
+  id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quotationNumber String
+  customerId      String?
+  customer        Customer?    @relation(fields: [customerId], references: [id])
+  leadId          String?
+  lead            Lead?        @relation(fields: [leadId], references: [id])
+  validUntil      String
+  subtotal        Float
+  tax             Float
+  total           Float
+  status          String       @default("SENT") // DRAFT, SENT, ACCEPTED, REJECTED, EXPIRED
+  itemsJson       String       // serialized line items
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  salesOrders     SalesOrder[]
+
+  @@unique([organizationId, quotationNumber])
+}
+
+model SalesOrder {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orderNumber    String
+  quotationId    String?
+  quotation      Quotation?   @relation(fields: [quotationId], references: [id])
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id])
+  orderDate      String
+  deliveryDate   String
+  subtotal       Float
+  tax            Float
+  total          Float
+  status         String       @default("CONFIRMED") // DRAFT, CONFIRMED, IN_PRODUCTION, READY_TO_DISPATCH, DISPATCHED, COMPLETED, CANCELLED
+  itemsJson      String       // serialized line items
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  invoices       Invoice[]
+
+  @@unique([organizationId, orderNumber])
+}
+
+model Invoice {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceNumber  String
+  salesOrderId   String?
+  salesOrder     SalesOrder?  @relation(fields: [salesOrderId], references: [id])
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id])
+  invoiceDate    String
+  dueDate        String
+  subtotal       Float
+  tax            Float
+  total          Float
+  amountPaid     Float        @default(0)
+  status         String       @default("SENT") // DRAFT, SENT, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED
+  itemsJson      String
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  payments       Payment[]
+
+  @@unique([organizationId, invoiceNumber])
+}
+
+model Payment {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentNumber  String
+  invoiceId      String
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id])
+  amount         Float
+  paymentDate    String
+  method         String       // BANK_TRANSFER, WIRE, CREDIT_CARD, CHEQUE
+  reference      String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, paymentNumber])
+}
