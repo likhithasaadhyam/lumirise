@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { prisma } from '../db.js';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../db';
 import { authenticate, requirePermission } from '../middleware/auth.js';
 import { recordAuditLog } from '../utils/audit.js';
 import {
@@ -71,7 +72,7 @@ router.post('/plans', async (req: Request, res: Response) => {
 router.get('/orders', requirePermission(['production.view', 'my_orders.view']), async (req: Request, res: Response) => {
   try {
     const { status, productId } = req.query;
-    const where: any = { organizationId: req.organizationId! };
+    let where: Prisma.ProductionOrderWhereInput = { organizationId: req.organizationId! };
     if (status && status !== 'ALL') where.status = String(status);
     if (productId && productId !== 'ALL') where.productId = String(productId);
 
@@ -92,7 +93,6 @@ router.get('/orders', requirePermission(['production.view', 'my_orders.view']), 
         assignedSupervisor: true,
         materialIssues: { include: { rawMaterial: true } },
       },
-      orderBy: { createdAt: 'desc' },
     });
 
     return res.json(orders);
@@ -133,11 +133,11 @@ router.post('/orders', requirePermission('production.create'), async (req: Reque
       notes,
     } = req.body;
 
-    let order: any;
+    let order: Prisma.ProductionOrderGetPayload<{ include: { product: true } }> | null = null;
     let attempts = 0;
     while (attempts < 5) {
       try {
-        order = await prisma.$transaction(async (tx) => {
+        order = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
           const orderNumber = await generateProductionOrderNumber(tx, req.organizationId!);
           return await tx.productionOrder.create({
             data: {
@@ -174,8 +174,8 @@ router.post('/orders', requirePermission('production.create'), async (req: Reque
       userName: `${req.user!.firstName} ${req.user!.lastName}`,
       action: 'CREATE',
       entity: 'ProductionOrder',
-      entityId: order.id,
-      details: `Created production order ${order.orderNumber} for ${order.product.name} (Qty: ${order.targetQuantity})`,
+      entityId: order!.id,
+      details: `Created production order ${order!.orderNumber} for ${order!.product.name} (Qty: ${order!.targetQuantity})`,
       newValue: 'PLANNED',
     });
 
@@ -195,7 +195,7 @@ router.patch('/orders/:id/status', requirePermission('production.manage'), async
 
     if (!existing) return res.status(404).json({ message: 'Order not found' });
 
-    const updateData: any = {};
+    const updateData: Partial<Prisma.ProductionOrderUpdateInput> = {};
     if (status) updateData.status = status;
     if (completedQuantity !== undefined) updateData.completedQuantity = Number(completedQuantity);
     if (rejectedQuantity !== undefined) updateData.rejectedQuantity = Number(rejectedQuantity);
@@ -211,7 +211,7 @@ router.patch('/orders/:id/status', requirePermission('production.manage'), async
       const addedQty = (Number(completedQuantity) || existing.completedQuantity) - existing.completedQuantity;
       if (addedQty > 0) {
         await prisma.product.update({
-          where: { id: existing.productId },
+          where: { id: existing.product.id },
           data: { currentStock: { increment: addedQty } },
         });
       }
@@ -263,11 +263,11 @@ router.post('/quality', requirePermission('quality.manage'), async (req: Request
       notes,
     } = req.body;
 
-    let inspection: any;
+    let inspection: Prisma.QualityInspectionGetPayload<Record<string, never>> | null = null;
     let attempts = 0;
     while (attempts < 5) {
       try {
-        inspection = await prisma.$transaction(async (tx) => {
+        inspection = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
           const inspectionNumber = await generateInspectionNumber(tx, req.organizationId!);
           return await tx.qualityInspection.create({
             data: {
@@ -301,9 +301,9 @@ router.post('/quality', requirePermission('quality.manage'), async (req: Request
       userName: `${req.user!.firstName} ${req.user!.lastName}`,
       action: 'CREATE',
       entity: 'QualityInspection',
-      entityId: inspection.id,
-      details: `Recorded Quality Inspection ${inspection.inspectionNumber} for ${itemName} [${inspection.status}]`,
-      newValue: inspection.status,
+      entityId: inspection!.id,
+      details: `Recorded Quality Inspection ${inspection!.inspectionNumber} for ${itemName} [${inspection!.status}]`,
+      newValue: inspection!.status,
     });
 
     return res.status(201).json(inspection);
@@ -358,11 +358,11 @@ router.post('/dispatches', requirePermission('dispatch.manage'), async (req: Req
       notes,
     } = req.body;
 
-    let dispatch: any;
+    let dispatch: Prisma.DispatchOrderGetPayload<Record<string, never>> | null = null;
     let attempts = 0;
     while (attempts < 5) {
       try {
-        dispatch = await prisma.$transaction(async (tx) => {
+        dispatch = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
           const dispatchNumber = await generateDispatchNumber(tx, req.organizationId!);
           return await tx.dispatchOrder.create({
             data: {
@@ -397,8 +397,8 @@ router.post('/dispatches', requirePermission('dispatch.manage'), async (req: Req
       userName: `${req.user!.firstName} ${req.user!.lastName}`,
       action: 'CREATE',
       entity: 'DispatchOrder',
-      entityId: dispatch.id,
-      details: `Created Dispatch Order ${dispatch.dispatchNumber} to ${customerName} via ${carrier}`,
+      entityId: dispatch!.id,
+      details: `Created Dispatch Order ${dispatch!.dispatchNumber} to ${customerName} via ${carrier}`,
       newValue: 'DISPATCHED',
     });
 

@@ -1,5 +1,6 @@
+import { Prisma } from '@prisma/client';
+import { prisma } from '../db';
 import { Router, Request, Response } from 'express';
-import { prisma } from '../db.js';
 import { authenticate, requirePermission } from '../middleware/auth.js';
 
 const router = Router();
@@ -107,24 +108,24 @@ router.get('/dashboard-kpis', requirePermission('dashboard.view'), async (req: R
     ]);
 
     // Calculate active orders count
-    const activeOrders = activeOrdersList.filter((o) =>
-      ['PLANNED', 'IN_PROGRESS', 'QUALITY_CHECK', 'MATERIAL_PENDING'].includes(o.status)
-    ).length;
+    const activeOrders = activeOrdersList.filter((o: { status: string }) =>
+  ['PLANNED', 'IN_PROGRESS', 'QUALITY_CHECK', 'MATERIAL_PENDING'].includes(o.status)
+).length;
 
     // Calculate dynamic shopfloor yield
-    const totalCompleted = activeOrdersList.reduce((acc, o) => acc + o.completedQuantity, 0);
-    const totalRejected = activeOrdersList.reduce((acc, o) => acc + o.rejectedQuantity, 0);
-    const overallYield =
-      totalCompleted + totalRejected > 0
-        ? `${((totalCompleted / (totalCompleted + totalRejected)) * 100).toFixed(1)}%`
-        : '98.5%';
+    const totalCompleted = activeOrdersList.reduce((acc: number, o: { completedQuantity: number }) => acc + o.completedQuantity, 0);
+const totalRejected = activeOrdersList.reduce((acc: number, o: { rejectedQuantity: number }) => acc + o.rejectedQuantity, 0);
+const overallYield =
+  totalCompleted + totalRejected > 0
+    ? `${((totalCompleted / (totalCompleted + totalRejected)) * 100).toFixed(1)}%`
+    : '98.5%';
 
     // Calculate low stock materials using actual safety minimum thresholds
-    const lowStockMaterials = rawMaterials.filter((m) => m.currentStock <= m.minStockLevel).length;
+    const lowStockMaterials = rawMaterials.filter((m: { currentStock: number; minStockLevel: number }) => m.currentStock <= m.minStockLevel).length;
 
     // Calculate total stock valuation
-    const rawValuation = rawMaterials.reduce((acc, m) => acc + m.currentStock * m.unitCost, 0);
-    const finishedValuation = products.reduce((acc, p) => acc + p.currentStock * p.costPrice, 0);
+    const rawValuation = rawMaterials.reduce((acc: number, m: { currentStock: number; unitCost: number }) => acc + m.currentStock * m.unitCost, 0);
+    const finishedValuation = products.reduce((acc: number, p: { currentStock: number; costPrice: number }) => acc + p.currentStock * p.costPrice, 0);
     const totalStockValue = rawValuation + finishedValuation;
 
     // Depot capacity metric (dynamic benchmark based on inventory density)
@@ -132,7 +133,7 @@ router.get('/dashboard-kpis', requirePermission('dashboard.view'), async (req: R
 
     // Employee personal stats calculation
     const isClockedIn = !!(userAttendanceToday && userAttendanceToday.checkIn && !userAttendanceToday.checkOut);
-    const daysTaken = (userApprovedLeaves as any[]).reduce((acc: number, l: any) => acc + (l.days || 0), 0);
+    const daysTaken = userApprovedLeaves.reduce((acc: number, l: { days: number | null }) => acc + (l.days ?? 0), 0);
     const myLeaveBalance = Math.max(0, 18 - daysTaken);
     const latestPaySlipAmount = latestUserSlip?.netSalary || 4500;
 
@@ -172,9 +173,9 @@ router.get('/production-summary', requirePermission('reports.production'), async
       include: { product: true },
     });
 
-    const totalTarget = orders.reduce((acc, o) => acc + o.targetQuantity, 0);
-    const totalCompleted = orders.reduce((acc, o) => acc + o.completedQuantity, 0);
-    const totalRejected = orders.reduce((acc, o) => acc + o.rejectedQuantity, 0);
+    const totalTarget = orders.reduce((acc: number, o: { targetQuantity: number }) => acc + o.targetQuantity, 0);
+    const totalCompleted = orders.reduce((acc: number, o: { completedQuantity: number }) => acc + o.completedQuantity, 0);
+    const totalRejected = orders.reduce((acc: number, o: { rejectedQuantity: number }) => acc + o.rejectedQuantity, 0);
     const overallYield = totalCompleted + totalRejected > 0
       ? ((totalCompleted / (totalCompleted + totalRejected)) * 100).toFixed(1)
       : '100.0';
@@ -199,8 +200,8 @@ router.get('/inventory-valuation', requirePermission('reports.inventory'), async
       prisma.product.findMany({ where: { organizationId: req.organizationId! } }),
     ]);
 
-    const rawValuation = rawMaterials.reduce((acc, m) => acc + m.currentStock * m.unitCost, 0);
-    const finishedValuation = products.reduce((acc, p) => acc + p.currentStock * p.costPrice, 0);
+    const rawValuation = rawMaterials.reduce((acc: number, m: { currentStock: number; unitCost: number }) => acc + m.currentStock * m.unitCost, 0);
+    const finishedValuation = products.reduce((acc: number, p: { currentStock: number; costPrice: number }) => acc + p.currentStock * p.costPrice, 0);
 
     return res.json({
       rawValuation,

@@ -7,6 +7,8 @@ if (!JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET environment variable is not set. Refusing to start.');
 }
 
+interface JwtPayload { userId: string }
+
 export interface AuthenticatedUser {
   userId: string;
   organizationId: string;
@@ -36,7 +38,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
 
     // Verify user & tenant still exist and are active with role permissions
     const user = await prisma.user.findUnique({
@@ -53,7 +55,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       return res.status(401).json({ message: 'User account is inactive or revoked.' });
     }
 
-    const permissions = user.role.permissions.map((p) => p.code);
+    const permissions = user.role.permissions.map((p: { code: string }): string => p.code);
 
     req.user = {
       userId: user.id,

@@ -76,7 +76,7 @@ router.post('/sign-in', async (req: Request, res: Response) => {
       details: `User ${user.email} signed in successfully.`,
     });
 
-    const permissions = user.role.permissions.map((p) => p.code);
+    const permissions = user.role.permissions.map((p: { code: string }) => p.code);
 
     return res.json({
       token,
@@ -300,7 +300,7 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const permissions = user.role.permissions.map((p) => p.code);
+    const permissions = user.role.permissions.map((p: { code: string }) => p.code);
 
     return res.json({
       user: {
@@ -375,7 +375,7 @@ router.post('/switch-role', authenticate, async (req: Request, res: Response) =>
       { expiresIn: '7d' }
     );
 
-    const permissions = targetUser.role.permissions.map((p) => p.code);
+    const permissions = targetUser.role.permissions.map((p: { code: string }): string => p.code);
 
     return res.json({
       token,

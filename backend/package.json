@@ -23,7 +23,6 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "lumirise-workspace": "file:..",
     "zod": "^3.24.2"
   },
   "devDependencies": {
